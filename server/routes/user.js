@@ -14,6 +14,10 @@ const {
   getUserDetails,
 } = require("../controller/user");
 
+const multer  = require('multer')
+const upload = multer({ dest: 'uploads/' })
+
+
 router
   .route("/new")
   .post( registerUser);
@@ -32,7 +36,7 @@ router
 router
   .route("/employee/:id")
   .get( getUserProfile)
-  .put( updateProfile);
+  .put(upload.single('image'), updateProfile);
 router.route("/logout").get( logoutUser);
 
 module.exports = router;
