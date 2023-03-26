@@ -11,6 +11,8 @@ import SideBar from "./components/Pages/Components/SideBar";
 import Redirect from "./components/Auth/Redirect";
 import UpdateProfile from "./components/Pages/Employee/UpdateProfile";
 import Profile from "./components/Pages/Employee/Profile";
+import ViewUserImage from "./components/Pages/Admin/ViewUserImage";
+import Location from "./components/Pages/Admin/Location";
 function App() {
   return (
     <>
@@ -20,10 +22,11 @@ function App() {
           <Route element={<Redirect />}>
             <Route element={<SideBar />}>
               <Route path="/admin" element={<Attendance />} />
-
-              <Route path="/admin/ViewUsers" element={<ViewUsers />} />
-              <Route path="/admin/Salary" element={<Salary />} />
-              <Route path="/admin/CreateUser" element={<CreateUser />} />
+              <Route path="/images" element={<ViewUserImage />} />
+              <Route path="/ViewUsers" element={<ViewUsers />} />
+              <Route path="/location" element={<Location />} />
+              <Route path="/Salary" element={<Salary />} />
+              <Route path="/CreateUser" element={<CreateUser />} />
             </Route>
             <Route path="*" element={<h1>404 Not Found</h1>} />
             <Route path="/" element={<Profile />} />
