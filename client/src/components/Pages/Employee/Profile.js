@@ -71,7 +71,7 @@ console.log(access)
           </Toolbar>
         </AppBar>
         <h1>Profile</h1> 
-      <div style={{display:"flex",alignItems:'center', justifyContent:"space-around"}}><div><img src={me.avatar} style={{width:250,height:250, borderRadius:50}} alt='picha' /><Button style={{
+      <div style={{display:"flex",alignItems:'center', justifyContent:"space-around"}}><div><img src={`http://localhost:5000/${me.avatar}`} style={{width:250,height:250, borderRadius:50}} alt='picha' /><Button style={{
           background:"#2E8B57",
           color:'white',
           fontWeight:'bold'
