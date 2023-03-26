@@ -2,9 +2,7 @@ import {
     Alert,
     CircularProgress,
     Snackbar,
-    FormControl,
-    InputLabel,
-    Input,
+   
     Button
   } from "@mui/material";
   import React, { useEffect, useState } from "react";
@@ -32,15 +30,19 @@ const [user,setUser] =useState({
   
       setOpen(false);
     };
+    console.log(avatar,12)
   useEffect(()=>{
     const user=JSON.parse(localStorage.getItem('user'))
     setUser(user.user)
   },[])
     const newProfile = async (e) => {
       e.preventDefault();
+
+      const formData= new FormData()
+formData.append("image",avatar)
       setloading(true);
       try {
-        await axios.put(`/api/users/employee/${user._id}`, {avatar} ).then((res) => {
+        await axios.put(`/api/users/employee/${user._id}`, formData ).then((res) => {
           setAvatar(res.data);
 
           setloading(false);
@@ -62,17 +64,15 @@ const [user,setUser] =useState({
         {error && <Alert severity="error">Error</Alert>}
         <div>UpdateProfile</div>
         <form onSubmit={newProfile}>
-          <FormControl sx={{ m: 1 }} variant="standard" fullWidth>
-            <InputLabel htmlFor="standard-adornment-username">
-              Copy link of profile picture
-            </InputLabel>
-            <Input
+         
+            <input
               required
               id="standard-adornment-username"
-              value={avatar}
-              onChange={(e) => setAvatar(e.target.value)}
+              accept=".png, .jpg, .jpeg"
+              type='file'
+              onChange={(e) => setAvatar(e.target.files[0])}
             />
-          </FormControl>
+   
           <Button
             type="submit"
             style={{
