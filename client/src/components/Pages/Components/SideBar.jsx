@@ -1,10 +1,11 @@
 import React, { useEffect, useState } from "react";
 import { motion, AnimatePresence } from "framer-motion";
-import { AppBar, IconButton, Toolbar } from "@mui/material";
+import { AppBar, Box, Button, IconButton, Toolbar } from "@mui/material";
 import { NavLink, Outlet, useNavigate } from "react-router-dom";
-import { AiOutlineUserAdd,AiOutlineLogout, AiFillCalendar, AiFillWallet } from "react-icons/ai";
+import {AiFillFileImage, AiOutlineUserAdd, AiFillCalendar, AiFillWallet } from "react-icons/ai";
 import { FiUsers } from "react-icons/fi";
 import { FaBars } from "react-icons/fa";
+import {CiLocationOn} from "react-icons/ci"
 import {BsEmojiSmile} from 'react-icons/bs'
 const navRoute = [
   {
@@ -15,18 +16,28 @@ const navRoute = [
   {
     name: "Create User",
     icon: <AiOutlineUserAdd />,
-    to: "/admin/CreateUser"
+    to: "/CreateUser"
   },
 
   {
     name: "View Salary",
     icon: <AiFillWallet />,
-    to: "/admin/Salary"
+    to: "/Salary"
+  },
+  {
+    name:"View Location",
+  icon:<CiLocationOn/>,
+  to:'/location'
   },
   {
     name: "Users",
     icon: <FiUsers />,
-    to: "/admin/ViewUsers"
+    to: "/ViewUsers"
+  },
+  {
+    name:"Users images",
+    icon:<AiFillFileImage/>,
+    to:'/images',
   }
 ];
 
@@ -92,6 +103,8 @@ const SideBar = () => {
           >
             <FaBars />
           </IconButton>
+          <Box sx={{flexGrow:1}}/>
+          <Button style={{color:'white', fontWeight:"bold"}}   onClick={logout}>Logout</Button>
         </Toolbar>
       </AppBar>
 
@@ -147,31 +160,6 @@ const SideBar = () => {
                 ))}
               </>
         
-            <>
-                  <div
-                    className="Link"
-                    onClick={logout}
-                    style={{cursor:'pointer'}}
-                  >
-                    {" "}
-                    <div className="icon"><AiOutlineLogout/></div>
-                    <AnimatePresence>
-                      {" "}
-                      {isOpen && (
-                        <motion.p
-                          variants={showAnimation}
-                          inital="hidden"
-                          animate="show"
-                          exit="hidden"
-                          className="Link_Text"
-                        >
-                          Log out
-                        </motion.p>
-                      )}
-                    </AnimatePresence>
-                  </div>
-                
-              </>
           </section>
         </motion.div>
         <main>
