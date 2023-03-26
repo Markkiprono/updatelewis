@@ -4,6 +4,8 @@ const Attendance = require("../model/attendance");
 const randomstring = require("randomstring");
 const sendToken = require("../middleware/jwtToken");
 const { default: mongoose } = require("mongoose");
+const multer  = require('multer')
+const upload = multer({ dest: 'uploads/' })
 
 const registerUser = asyncHandler(async (req, res) => {
   const { name, email } = req.body;
@@ -36,8 +38,9 @@ const registerUser = asyncHandler(async (req, res) => {
 
 const updateProfile = asyncHandler(async (req, res) => {
   //we add cloudinary letter then we are giving a condition that if the user has uploaded a new image then we will update the image avatar
-const {id}=req.params
-  const avatar=req.body.avatar
+
+  const {id}=req.params
+  const avatar=req.file.path
   const user = await User.findByIdAndUpdate({_id:id});
  
  user.avatar=avatar
@@ -104,12 +107,14 @@ const queryUsers = asyncHandler(async (req, res) => {
 
 const allUsers = asyncHandler(async (req, res) => {
   const users = await User.find();
+
   res.status(200).json(users);
 });
 const getUserDetails = asyncHandler(async (req, res) => {
   const user = await User.findById(req.params.id);
 
   if (user) {
+   
     res.status(200).json(user);
   } else {
     res.status(404).json("User not found");
