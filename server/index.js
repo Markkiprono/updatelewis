@@ -12,7 +12,7 @@ dotenv.config();
 connectDB();
 //middleware
 app.use(cookieParser());
-app.use(express.json());
+app.use(express.json({ extended: false }));
 app.use(cors());
 app.use(errorHandler);
 //error handler
@@ -20,6 +20,7 @@ app.use(errorHandler);
 app.get("/", (req, res) => {
   res.status(201).json("Hello World");
 });
+app.use('/uploads',express.static('uploads'))
 app.use("/api/users", UserRoutes);
 app.use("/api/attendance", AttendanceRoutes);
 app.use("/api/salary", SalaryRoutes);
