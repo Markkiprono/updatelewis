@@ -1,156 +1,165 @@
-const asyncHandler = require("express-async-handler");
+const fs = require("fs");
+const path = require("path");
+const crypto = require("crypto");
 const User = require("../model/user");
 const Attendance = require("../model/attendance");
-const randomstring = require("randomstring");
-const sendToken = require("../middleware/jwtToken");
-const { default: mongoose } = require("mongoose");
-const multer  = require('multer')
-const upload = multer({ dest: 'uploads/' })
+const Salary = require("../model/salary");
+const { asyncHandler, HttpError } = require("../middleware/errors");
+const { UPLOAD_DIR } = require("../middleware/upload");
 
-const registerUser = asyncHandler(async (req, res) => {
-  const { name, email } = req.body;
+// Readable temporary password, e.g. "kq7m-x2pd"
+const tempPassword = () => {
+  const chars = "abcdefghjkmnpqrstuvwxyz23456789";
+  const pick = () => chars[crypto.randomInt(chars.length)];
+  return `${Array.from({ length: 4 }, pick).join("")}-${Array.from({ length: 4 }, pick).join("")}`;
+};
 
-  if (!email || !name) {
-    res.status(402).json("Please fill all the fields");
+const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+const removeAvatarFile = (avatar) => {
+  if (!avatar || !avatar.startsWith("uploads/")) return;
+  fs.unlink(path.join(UPLOAD_DIR, path.basename(avatar)), () => {});
+};
+
+// ---------- auth ----------
+
+const login = asyncHandler(async (req, res) => {
+  const { email, password } = req.body || {};
+  if (!email || !password) throw new HttpError(400, "Enter your email and password");
+
+  const user = await User.findOne({ email: String(email).toLowerCase().trim() }).select("+password");
+  if (!user || !(await user.comparePassword(password))) {
+    throw new HttpError(401, "Wrong email or password");
   }
-
-  const userExists = await User.findOne({ email });
-
-  if (userExists) {
-    res.status(400).json("Seems Like this email is already registered");
-  }
-
-  const user = await User.create({
-    email,
-    name,
-    password: randomstring.generate({
-      length: 6,
-      charset: "alphanumeric",
-    }),
-  });
-
-  if (user) {
-    res.status(200).json(user)
-  } else {
-    res.status(500).json("Something went wrong please try again");
-  }
+  res.json({ token: user.getJwtToken(), user });
 });
 
-const updateProfile = asyncHandler(async (req, res) => {
-  //we add cloudinary letter then we are giving a condition that if the user has uploaded a new image then we will update the image avatar
-
-  const {id}=req.params
-  const avatar=req.file.path
-  const user = await User.findByIdAndUpdate({_id:id});
- 
- user.avatar=avatar
- const updated=await user.save()
-
-  
-  if(updated){
-  res.status(200).json({
-    success: true,
-    updated
-  });
-}
+const me = asyncHandler(async (req, res) => {
+  res.json({ user: req.user });
 });
 
-const loginUser = asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
-
-  const user = await User.findOne({ email });
-
-  if (!user) {
-    res.status(401).json("No such user exists");
+const changePassword = asyncHandler(async (req, res) => {
+  const { currentPassword, newPassword } = req.body || {};
+  if (!newPassword || newPassword.length < 6) {
+    throw new HttpError(400, "New password must be at least 6 characters");
   }
-
-  if ((await user.password) === password) {
-    sendToken(user, 200, res);
-  } else {
-    res.status(403).json("Invalid email or password");
+  const user = await User.findById(req.user._id).select("+password");
+  if (!(await user.comparePassword(currentPassword || ""))) {
+    throw new HttpError(400, "Current password is wrong");
   }
+  user.password = newPassword;
+  await user.save();
+  res.json({ message: "Password updated" });
 });
-const logoutUser = asyncHandler(async (req, res) => {
-  res.cookie("token", null, {
-    expires: new Date(Date.now()),
-    httpOnly: true,
-  });
-  res.status(200).json({
-    success: true,
-    message: "Logged out",
-  });
+
+const updateAvatar = asyncHandler(async (req, res) => {
+  if (!req.file) throw new HttpError(400, "Please choose an image");
+  const old = req.user.avatar;
+  req.user.avatar = `uploads/${req.file.filename}`;
+  await req.user.save();
+  removeAvatarFile(old);
+  res.json({ user: req.user });
 });
-const queryUsers = asyncHandler(async (req, res) => {
-  const keyword = req.query.search
-    ? {
-        $or: [
-          {
-            name: {
-              $regex: req.query.search,
-              $options: "i",
-            },
-          },
-          {
-            email: {
-              $regex: req.query.search,
-              $options: "i",
-            },
-          },
-        ],
-      }
+
+// ---------- admin: employees ----------
+
+const listUsers = asyncHandler(async (req, res) => {
+  const q = (req.query.search || "").trim();
+  const filter = q
+    ? { $or: [{ name: new RegExp(escapeRegex(q), "i") }, { email: new RegExp(escapeRegex(q), "i") }] }
     : {};
+  const users = await User.find(filter).sort({ createdAt: -1 }).lean();
 
-  const users = User.find(keyword).find({ _id: { $ne: req.user._id } });
+  // Attach totals and on-shift status for each user
+  const [hours, open] = await Promise.all([
+    Salary.aggregate([
+      { $group: { _id: "$user", hours: { $sum: "$hours" }, earned: { $sum: "$amount" } } },
+    ]),
+    Attendance.find({ checkOut: null }).select("user checkIn").lean(),
+  ]);
+  const byUser = Object.fromEntries(hours.map((h) => [String(h._id), h]));
+  const openByUser = Object.fromEntries(open.map((o) => [String(o.user), o.checkIn]));
 
-  res.status(200).json(users);
+  res.json(
+    users.map(({ password, __v, ...u }) => ({
+      ...u,
+      totalHours: byUser[u._id]?.hours || 0,
+      totalEarned: byUser[u._id]?.earned || 0,
+      onShiftSince: openByUser[u._id] || null,
+    }))
+  );
 });
 
-const allUsers = asyncHandler(async (req, res) => {
-  const users = await User.find();
+const createUser = asyncHandler(async (req, res) => {
+  const { name, email, role, hourlyRate } = req.body || {};
+  if (!name || !email) throw new HttpError(400, "Name and email are required");
 
-  res.status(200).json(users);
-});
-const getUserDetails = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.params.id);
-
-  if (user) {
-   
-    res.status(200).json(user);
-  } else {
-    res.status(404).json("User not found");
-  }
-});
-
-const deleteEmployee = asyncHandler(async (req, res) => {
-  const id = req.params.id;
-  const user = await User.findByIdAndDelete(id);
-  res.status(200).json(user);
-});
-
-const viewEmployeeLocation = asyncHandler(async (req, res) => {
-  const { id } = req.params;
-
-  const user = await Attendance.find({ employeeId: id });
-  res.status(200).json(user);
-});
-
-const getUserProfile = asyncHandler(async (req, res) => {
-  const user = await User.findById(req.user.id);
-  res.status(200).json({
-    success: true,
-    user,
+  const password = tempPassword();
+  const user = await User.create({
+    name,
+    email,
+    password,
+    role: role === "admin" ? "admin" : "employee",
+    hourlyRate: hourlyRate === undefined || hourlyRate === "" ? undefined : Number(hourlyRate),
   });
+  // The temporary password is only ever shown once, here
+  res.status(201).json({ user, tempPassword: password });
+});
+
+const getUser = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) throw new HttpError(404, "Employee not found");
+  const [attendance, salaries] = await Promise.all([
+    Attendance.find({ user: user._id }).sort({ checkIn: -1 }).limit(50),
+    Salary.find({ user: user._id }).sort({ createdAt: -1 }).limit(50),
+  ]);
+  res.json({ user, attendance, salaries });
+});
+
+const updateUser = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) throw new HttpError(404, "Employee not found");
+  const { name, role, hourlyRate } = req.body || {};
+
+  if (role && String(user._id) === String(req.user._id) && role !== "admin") {
+    throw new HttpError(400, "You can't remove your own admin access");
+  }
+  if (name !== undefined) user.name = name;
+  if (role !== undefined) user.role = role === "admin" ? "admin" : "employee";
+  if (hourlyRate !== undefined) user.hourlyRate = Number(hourlyRate);
+  await user.save();
+  res.json({ user });
+});
+
+const resetPassword = asyncHandler(async (req, res) => {
+  const user = await User.findById(req.params.id);
+  if (!user) throw new HttpError(404, "Employee not found");
+  const password = tempPassword();
+  user.password = password;
+  await user.save();
+  res.json({ tempPassword: password });
+});
+
+const deleteUser = asyncHandler(async (req, res) => {
+  if (String(req.params.id) === String(req.user._id)) {
+    throw new HttpError(400, "You can't delete your own account");
+  }
+  const user = await User.findByIdAndDelete(req.params.id);
+  if (!user) throw new HttpError(404, "Employee not found");
+  await Promise.all([Attendance.deleteMany({ user: user._id }), Salary.deleteMany({ user: user._id })]);
+  removeAvatarFile(user.avatar);
+  res.json({ message: "Employee deleted" });
 });
 
 module.exports = {
-  registerUser,
-  loginUser,
-  queryUsers,
-  allUsers,
-  deleteEmployee,
-  viewEmployeeLocation,
-  getUserProfile,
-  logoutUser,
-  getUserDetails,
-  updateProfile,
+  login,
+  me,
+  changePassword,
+  updateAvatar,
+  listUsers,
+  createUser,
+  getUser,
+  updateUser,
+  resetPassword,
+  deleteUser,
 };

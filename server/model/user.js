@@ -1,62 +1,54 @@
 const mongoose = require("mongoose");
 const validator = require("validator");
-
+const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 
-const userSchema = mongoose.Schema({
-  name: {
-    type: String,
-    required: true,
+const userSchema = new mongoose.Schema(
+  {
+    name: { type: String, required: true, trim: true },
+    email: {
+      type: String,
+      required: true,
+      trim: true,
+      lowercase: true,
+      unique: true,
+      validate: [validator.isEmail, "Please enter a valid email"],
+    },
+    password: { type: String, required: true, minlength: 6, select: false },
+    role: { type: String, enum: ["employee", "admin"], default: "employee" },
+    // Pay per hour worked, in KES
+    hourlyRate: { type: Number, default: 100, min: 0 },
+    avatar: { type: String, default: "" },
   },
-  email: {
-    type: String,
-    required: true,
-    trim: true,
-    validate: [validator.isEmail, "Please add a valid email"],
-    unique: true,
-  },
-  salary: {
-    type: Number,
-    required: true,
-    trim: true,
-    default: 0,
-  },
-  role: {
-    type: String,
-    required: true,
-    default: "employee",
-  },
-  password: {
-    type: String,
-    required: true,
-    minlength: [6, "Password must be at least 6 characters long"],
-  },
-  avatar: {
-    type: String,
-    default:
-      "https://th.bing.com/th/id/OIP.aF6n8le-tp9qboqmV6_pMgAAAA?pid=ImgDet&w=192&h=192&c=7",
-  },
-  createdAt: {
-    type: Date,
-    default: Date.now,
-  },
+  { timestamps: true }
+);
+
+userSchema.pre("save", async function () {
+  if (!this.isModified("password")) return;
+  this.password = await bcrypt.hash(this.password, 10);
 });
-//static signup method
-userSchema.pre("save", async function (next) {
-  if (!this.isModified("password")) {
-    next();
-  }
-  this.password = this.password;
-});
-//static login method
+
+userSchema.methods.comparePassword = async function (entered) {
+  if (this.password.startsWith("$2")) return bcrypt.compare(entered, this.password);
+  // Accounts from the old version stored plain-text passwords: accept once, then hash
+  if (entered !== this.password) return false;
+  this.password = entered;
+  await this.save();
+  return true;
+};
+
 userSchema.methods.getJwtToken = function () {
   return jwt.sign({ id: this._id }, process.env.JWT_SECRET, {
-    expiresIn: "1d",
+    expiresIn: process.env.JWT_EXPIRES || "7d",
   });
 };
-//compare password
-userSchema.methods.comparePassword = async function (enteredPassword) {
-  return await bcrypt.compare(enteredPassword, this.password);
-};
+
+userSchema.set("toJSON", {
+  transform: (_doc, ret) => {
+    delete ret.password;
+    delete ret.__v;
+    return ret;
+  },
+});
 
 module.exports = mongoose.model("User", userSchema);
